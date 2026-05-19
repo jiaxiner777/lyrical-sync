@@ -121,7 +121,7 @@ func fetchExternalLyricsFromInternet(title string, artist string) (string, error
 	cleanLyrics := cleanNetEaseLyrics(parsedLyric.LRC.Lyric)
 	log.Printf("[PERF] 3. Regexp Clean took: %v", time.Since(cleanStart))
 	if cleanLyrics == "" {
-		return "", newServiceError(ServiceErrorUpstreamBadResp, "lyrics source returned empty lyrics", false, nil)
+		return "", newServiceError(ServiceErrorInvalidInput, "没有找到可用的英文歌词，请检查歌名或歌手拼写", false, nil)
 	}
 
 	return cleanLyrics, nil

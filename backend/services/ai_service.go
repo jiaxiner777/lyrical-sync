@@ -92,12 +92,153 @@ type promptTemplateData struct {
 }
 
 type modelChunkResponse struct {
-	Lines []modelChunkLine `json:"lines"`
+	Lines       []modelChunkLine `json:"l"`
+	LegacyLines []modelChunkLine `json:"lines"`
 }
 
 type modelChunkLine struct {
-	OriginalText string       `json:"originalText"`
-	Details      []WordDetail `json:"details"`
+	Text            string           `json:"t"`
+	LegacyText      string           `json:"text"`
+	OriginalText    string           `json:"originalText"`
+	Words           []modelChunkUnit `json:"w"`
+	LegacyWords     []modelChunkUnit `json:"words"`
+	Syllables       []modelChunkUnit `json:"s"`
+	LegacySyllables []modelChunkUnit `json:"syllables"`
+	Details         []modelChunkUnit `json:"details"`
+}
+
+type modelChunkUnit struct {
+	Text          string   `json:"t"`
+	LegacyText    string   `json:"text"`
+	Word          string   `json:"word"`
+	Pinyin        string   `json:"p"`
+	LegacyPinyin  string   `json:"pinyin"`
+	Type          string   `json:"type,omitempty"`
+	Elision       bool     `json:"elision,omitempty"`
+	Link          bool     `json:"link,omitempty"`
+	LinkWithNext  *bool    `json:"linkWithNext,omitempty"`
+	Opacity       *float64 `json:"o,omitempty"`
+	LegacyOpacity *float64 `json:"opacity,omitempty"`
+}
+
+func (response modelChunkResponse) effectiveLines() []modelChunkLine {
+	if len(response.Lines) > 0 {
+		return response.Lines
+	}
+	return response.LegacyLines
+}
+
+func (line modelChunkLine) units() []modelChunkUnit {
+	if len(line.Syllables) > 0 {
+		return line.Syllables
+	}
+	if len(line.LegacySyllables) > 0 {
+		return line.LegacySyllables
+	}
+	if len(line.Words) > 0 {
+		return line.Words
+	}
+	if len(line.LegacyWords) > 0 {
+		return line.LegacyWords
+	}
+	return line.Details
+}
+
+func (unit modelChunkUnit) textValue() string {
+	if strings.TrimSpace(unit.Text) != "" {
+		return unit.Text
+	}
+	if strings.TrimSpace(unit.LegacyText) != "" {
+		return unit.LegacyText
+	}
+	return unit.Word
+}
+
+func (unit modelChunkUnit) pinyinValue() string {
+	if strings.TrimSpace(unit.Pinyin) != "" {
+		return unit.Pinyin
+	}
+	return unit.LegacyPinyin
+}
+
+func (unit modelChunkUnit) opacityValue() *float64 {
+	if unit.Opacity != nil {
+		return unit.Opacity
+	}
+	return unit.LegacyOpacity
+}
+
+func (unit modelChunkUnit) hasLink() bool {
+	if unit.Link {
+		return true
+	}
+	return unit.LinkWithNext != nil && *unit.LinkWithNext
+}
+
+func restoreWordDetails(units []modelChunkUnit) ([]WordDetail, error) {
+	details := make([]WordDetail, 0, len(units))
+	for _, unit := range units {
+		word := strings.TrimSpace(unit.textValue())
+		pinyin := strings.TrimSpace(unit.pinyinValue())
+		if shouldSkipModelUnit(word, pinyin) {
+			continue
+		}
+		if word == "" || pinyin == "" {
+			log.Printf("[WARN] AI invalid pronunciation unit. t=%q text=%q word=%q p=%q pinyin=%q type=%q", unit.Text, unit.LegacyText, unit.Word, unit.Pinyin, unit.LegacyPinyin, unit.Type)
+			return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned an invalid pronunciation unit", true, nil)
+		}
+
+		detail := WordDetail{
+			Word:   word,
+			Pinyin: pinyin,
+			Type:   "normal",
+		}
+
+		opacity := unit.opacityValue()
+		isElision := unit.Elision || opacity != nil || strings.EqualFold(unit.Type, "elision")
+		if unit.hasLink() {
+			link := true
+			detail.LinkWithNext = &link
+			if !isElision {
+				detail.Type = "liaison"
+			}
+		}
+		if strings.EqualFold(unit.Type, "liaison") && !isElision {
+			detail.Type = "liaison"
+		}
+		if isElision {
+			detail.Type = "elision"
+			if opacity != nil {
+				detail.Opacity = opacity
+			} else {
+				defaultOpacity := 0.5
+				detail.Opacity = &defaultOpacity
+			}
+		}
+
+		details = append(details, detail)
+	}
+
+	if len(details) == 0 {
+		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned no usable pronunciation units", true, nil)
+	}
+
+	return details, nil
+}
+
+func shouldSkipModelUnit(word string, pinyin string) bool {
+	if word == "" && pinyin == "" {
+		return true
+	}
+	if pinyin != "" {
+		return false
+	}
+	for _, r := range word {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 type lyricChunk struct {
@@ -106,21 +247,21 @@ type lyricChunk struct {
 
 var aiPromptTemplate = template.Must(template.New("syllable-json-system-prompt").Parse(`You are an expert English lyric pronunciation annotator for Chinese-speaking learners.
 
-Your task is to annotate English lyric lines into syllable-level pronunciation hints.
+Your task is to annotate English lyric lines into ultra-compact pronunciation JSON.
 Return JSON only. Do not wrap the response in markdown. Do not add explanations.
 
 The JSON schema must be:
 {
-  "lines": [
+  "l": [
     {
-      "originalText": "original lyric line",
-      "details": [
+      "t": "original lyric line",
+      "s": [
         {
-          "word": "token from the lyric line",
-          "pinyin": "Chinese-style pronunciation hint",
-          "type": "normal | liaison | elision",
-          "opacity": 0.5,
-          "linkWithNext": true
+          "t": "token from the lyric line",
+          "p": "Chinese-style pronunciation hint",
+          "elision": true,
+          "o": 0.5,
+          "link": true
         }
       ]
     }
@@ -128,21 +269,21 @@ The JSON schema must be:
 }
 
 Rules you must follow:
-1. Return one JSON object with key lines.
-2. Output line count must exactly equal input line count.
+1. Return one JSON object with key l.
+2. Output line count in l must exactly equal input line count.
 3. Do not merge, split, omit, summarize, abbreviate, or reorder lyric lines.
 4. You must process the full input from the first lyric line to the last lyric line.
 5. Never output placeholders such as "...", "same as above", "[Chorus repeats]", or any shortened form.
-6. Every non-empty input lyric line must produce exactly one corresponding JSON line entry.
-7. Do not include songId, startTime, or endTime. The backend will add those fields.
-8. details must preserve the spoken word order from originalText.
-9. Use type="normal" for standard pronunciation.
-10. Use type="elision" when a sound is weakened, swallowed, or nearly omitted. Include opacity between 0 and 1 for elision items.
-11. Use type="liaison" when the current word links smoothly into the next word. Set linkWithNext=true on the current word.
-12. Omit opacity unless the item is elision.
-13. Omit linkWithNext unless it is true.
+6. Every non-empty input lyric line must produce exactly one corresponding line object.
+7. Each line object must include t for the full original lyric line and s for the spoken units in order.
+8. Each spoken unit must include only t and p when the pronunciation is normal.
+9. Never output any type field.
+10. Only output elision:true when a sound is weakened, swallowed, or nearly omitted.
+11. Only output o when elision:true is present. o must be between 0 and 1.
+12. Only output link:true when the current spoken unit links smoothly into the next spoken unit.
+13. Never output false boolean fields.
 14. Preserve contractions such as I'd, don't, you're as single words when appropriate.
-15. Keep pinyin concise and learner-friendly for Chinese speakers.
+15. Keep p concise and learner-friendly for Chinese speakers.
 16. The output must be valid JSON that can be parsed directly with a JSON parser.
 
 Few-shot example input:
@@ -213,21 +354,21 @@ func renderSystemPrompt() (string, error) {
 	data := promptTemplateData{
 		ExampleLyrics: "I'd spend ten thousand hours or the rest of my life",
 		ExampleJSON: `{
-  "lines": [
+  "l": [
     {
-      "originalText": "I'd spend ten thousand hours or the rest of my life",
-      "details": [
-        { "word": "I'd", "pinyin": "艾(d)", "type": "elision", "opacity": 0.5 },
-        { "word": "spend", "pinyin": "斯班", "type": "normal" },
-        { "word": "ten", "pinyin": "天", "type": "normal" },
-        { "word": "thousand", "pinyin": "套-赞", "type": "liaison", "linkWithNext": true },
-        { "word": "hours", "pinyin": "奥-儿", "type": "liaison", "linkWithNext": true },
-        { "word": "or", "pinyin": "则", "type": "normal" },
-        { "word": "the", "pinyin": "得", "type": "normal" },
-        { "word": "rest", "pinyin": "热-斯-得", "type": "normal" },
-        { "word": "of", "pinyin": "(夫)", "type": "elision", "opacity": 0.3 },
-        { "word": "my", "pinyin": "麦", "type": "normal" },
-        { "word": "life", "pinyin": "赖(夫)", "type": "elision", "opacity": 0.5 }
+      "t": "I'd spend ten thousand hours or the rest of my life",
+      "s": [
+        { "t": "I'd", "p": "艾(d)", "elision": true, "o": 0.5 },
+        { "t": "spend", "p": "斯班" },
+        { "t": "ten", "p": "天" },
+        { "t": "thousand", "p": "套-赞", "link": true },
+        { "t": "hours", "p": "奥-儿", "link": true },
+        { "t": "or", "p": "则" },
+        { "t": "the", "p": "得" },
+        { "t": "rest", "p": "热-斯-得" },
+        { "t": "of", "p": "(夫)", "elision": true, "o": 0.3 },
+        { "t": "my", "p": "麦" },
+        { "t": "life", "p": "赖(夫)", "elision": true, "o": 0.5 }
       ]
     }
   ]
@@ -342,24 +483,47 @@ func annotateChunkOnce(
 		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned empty JSON content", false, nil)
 	}
 
+	sanitizedJSON := sanitizeModelJSON(rawJSON)
 	var parsed modelChunkResponse
-	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
-		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned invalid JSON", false, err)
+	if err := json.Unmarshal([]byte(sanitizedJSON), &parsed); err != nil {
+		log.Printf("[WARN] AI raw JSON parse failed. sample=%q", truncateForLog(sanitizedJSON, 800))
+		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned invalid JSON", true, err)
 	}
-	if len(parsed.Lines) != len(chunk.Lines) {
-		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned a mismatched number of lyric lines", false, nil)
+
+	parsedLines := parsed.effectiveLines()
+	if len(parsedLines) != len(chunk.Lines) {
+		log.Printf("[WARN] AI line count mismatch. expected=%d got=%d sample=%q", len(chunk.Lines), len(parsedLines), truncateForLog(sanitizedJSON, 800))
+		return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned a mismatched number of lyric lines", true, nil)
 	}
 
 	result := make([]SongLine, 0, len(chunk.Lines))
 	for index, sourceLine := range chunk.Lines {
-		annotatedLine := parsed.Lines[index]
-		if len(annotatedLine.Details) == 0 {
-			return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned an empty details array for a lyric line", false, nil)
+		annotatedLine := parsedLines[index]
+		units := annotatedLine.units()
+		if len(units) == 0 {
+			log.Printf("[WARN] AI returned empty units for line sample=%q", truncateForLog(sanitizedJSON, 800))
+			return nil, newServiceError(ServiceErrorUpstreamBadResp, "AI provider returned an empty pronunciation unit array for a lyric line", true, nil)
+		}
+
+		details, detailsErr := restoreWordDetails(units)
+		if detailsErr != nil {
+			return nil, detailsErr
+		}
+
+		lineText := strings.TrimSpace(annotatedLine.Text)
+		if lineText == "" {
+			lineText = strings.TrimSpace(annotatedLine.LegacyText)
+		}
+		if lineText == "" {
+			lineText = strings.TrimSpace(annotatedLine.OriginalText)
+		}
+		if lineText == "" {
+			lineText = sourceLine
 		}
 
 		result = append(result, SongLine{
-			OriginalText: sourceLine,
-			Details:      annotatedLine.Details,
+			OriginalText: lineText,
+			Details:      details,
 		})
 	}
 
@@ -368,10 +532,33 @@ func annotateChunkOnce(
 
 func buildChunkUserPrompt(chunk lyricChunk) string {
 	return fmt.Sprintf(
-		"Annotate exactly %d lyric lines in the same order. Return one JSON object with key lines only. Do not add any extra commentary.\n\nLyrics:\n%s",
+		"Annotate exactly %d lyric lines in the same order. Return one JSON object with key l only. Prefer compact keys l, s, t, p, o, elision, link. Do not add any extra commentary.\n\nLyrics:\n%s",
 		len(chunk.Lines),
 		strings.Join(chunk.Lines, "\n"),
 	)
+}
+
+func sanitizeModelJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start >= 0 && end > start {
+		return strings.TrimSpace(raw[start : end+1])
+	}
+
+	return raw
+}
+
+func truncateForLog(value string, max int) string {
+	if len(value) <= max {
+		return value
+	}
+	return value[:max]
 }
 
 func assignPlaceholderTimings(lines []SongLine) []SongLine {

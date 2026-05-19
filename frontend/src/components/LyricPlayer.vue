@@ -118,43 +118,31 @@ const getLineClass = (index: number) => {
 }
 
 const getWordClass = (detail: WordDetail, isActive: boolean) => {
-  if (!isActive) {
-    return 'text-xl font-bold text-gray-300'
-  }
+  const baseClass = isActive
+    ? 'text-2xl font-bold text-gray-800'
+    : 'text-xl font-bold text-gray-300'
 
   if (isElision(detail)) {
-    return 'text-2xl font-bold text-gray-500'
+    return `${baseClass} opacity-40`
   }
 
-  return 'text-2xl font-bold text-gray-800'
+  return baseClass
 }
 
-const getPinyinClass = (detail: WordDetail, isActive: boolean) => {
+const getWordRowClass = (detail: WordDetail) => {
+  if (detail.linkWithNext) {
+    return 'relative inline-flex items-start pr-4'
+  }
+
+  return 'inline-flex items-start'
+}
+
+const getPinyinClass = (_detail: WordDetail, isActive: boolean) => {
   if (!isActive) {
     return 'text-base font-medium text-gray-300'
   }
 
-  if (isElision(detail)) {
-    return 'text-lg font-medium text-gray-400'
-  }
-
   return 'text-lg font-medium text-orange-500'
-}
-
-const getTokenStyle = (detail: WordDetail, isActive: boolean) => {
-  if (!isActive) {
-    return {
-      opacity: isElision(detail) ? 0.3 : 0.45,
-    }
-  }
-
-  if (isElision(detail)) {
-    return {
-      opacity: detail.opacity ?? 0.4,
-    }
-  }
-
-  return undefined
 }
 
 watch(
@@ -248,22 +236,22 @@ onBeforeUnmount(() => {
               v-for="(detail, detailIndex) in line.details"
               :key="`${detail.word}-${detailIndex}`"
               class="flex min-w-fit flex-col items-center"
-              :style="getTokenStyle(detail, isLineActive(lineIndex))"
             >
-              <span :class="getWordClass(detail, isLineActive(lineIndex))">
-                {{ detail.word }}
-              </span>
-
-              <span class="mt-1 flex items-center gap-1 leading-none">
-                <span :class="getPinyinClass(detail, isLineActive(lineIndex))">
-                  {{ detail.pinyin }}
+              <span :class="getWordRowClass(detail)">
+                <span :class="getWordClass(detail, isLineActive(lineIndex))">
+                  {{ isElision(detail) ? `(${detail.word})` : detail.word }}
                 </span>
                 <span
                   v-if="detail.linkWithNext"
-                  class="text-base leading-none"
-                  :class="isLineActive(lineIndex) ? 'text-emerald-500' : 'text-gray-300'"
+                  class="absolute -right-0.5 top-0 text-base leading-none text-emerald-400"
                 >
                   ︶
+                </span>
+              </span>
+
+              <span class="mt-1 leading-none">
+                <span :class="getPinyinClass(detail, isLineActive(lineIndex))">
+                  {{ detail.pinyin }}
                 </span>
               </span>
             </div>
