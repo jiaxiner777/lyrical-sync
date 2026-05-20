@@ -6,19 +6,19 @@
   "petLineage": "primitives",
   "petLineageSource": "auto",
   "petLineageSettled": true,
-  "growthPoints": 250,
+  "growthPoints": 252,
   "growthStage": "stage-b",
   "successfulSaveCount": 2,
   "theme": "cyber-oasis",
-  "petAnchorLine": 3,
-  "petAnchorDocument": "file:///d%3A/work/codeplay/lyrical-sync/backend/.env",
+  "petAnchorLine": 0,
+  "petAnchorDocument": "file:///d%3A/work/codeplay/lyrical-sync/frontend/.env.production",
   "inventory": [],
   "placedFurniture": [],
   "petDockPosition": {
     "x": 0.88,
     "y": 0.66
   },
-  "totalMeaningfulLinesAdded": 3681,
+  "totalMeaningfulLinesAdded": 3683,
   "petStatus": "normal",
   "editorPetEnabled": true,
   "editorPetScale": 100

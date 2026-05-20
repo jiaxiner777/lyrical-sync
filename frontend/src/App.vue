@@ -5,7 +5,8 @@ import type { ApiErrorResponse, SongResponse, SongSearchResult } from './types/s
 
 type Page = 'home' | 'player'
 
-const songApiBase = 'http://localhost:8080/api/songs'
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '')
+const songApiBase = `${apiBaseUrl}/api/songs`
 
 const currentPage = ref<Page>('home')
 const searchTitle = ref('')
