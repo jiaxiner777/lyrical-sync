@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
@@ -45,6 +43,27 @@ type songDetailResponse struct {
 	Lines  []services.SongLine `json:"lines"`
 }
 
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
+
+		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func main() {
 	if err := godotenv.Load(".env"); err != nil {
 		if fallbackErr := godotenv.Load("backend/.env"); fallbackErr != nil {
@@ -55,22 +74,16 @@ func main() {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 
-	router := gin.Default()
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173"},
-		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
-		AllowCredentials: false,
-		MaxAge:           12 * time.Hour,
-	}))
+	r := gin.Default()
+	r.Use(CORSMiddleware())
 
-	router.POST("/api/song/parse", parseSongHandler)
-	router.POST("/api/songs/admin/add", adminAddSongHandler)
-	router.POST("/api/songs/load", loadSongHandler)
-	router.GET("/api/songs/search", searchSongsHandler)
-	router.GET("/api/songs/:id", getSongDetailHandler)
+	r.POST("/api/song/parse", parseSongHandler)
+	r.POST("/api/songs/admin/add", adminAddSongHandler)
+	r.POST("/api/songs/load", loadSongHandler)
+	r.GET("/api/songs/search", searchSongsHandler)
+	r.GET("/api/songs/:id", getSongDetailHandler)
 
-	router.Run(":8080")
+	r.Run(":8080")
 }
 
 func parseSongHandler(c *gin.Context) {
