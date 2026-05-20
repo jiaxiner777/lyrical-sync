@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import type { SongResponse, WordDetail } from '../types/song'
 
+type LineState = 'active' | 'past' | 'future'
+
 const props = defineProps<{
   song: SongResponse
 }>()
@@ -107,26 +109,44 @@ const setLineRef = (
 
 const isElision = (detail: WordDetail) => detail.type === 'elision' || detail.opacity !== undefined
 
-const isLineActive = (index: number) => activeLineIndex.value === index
-
-const getLineClass = (index: number) => {
-  if (isLineActive(index)) {
-    return 'scale-[1.02] opacity-100'
+const getLineState = (index: number): LineState => {
+  if (activeLineIndex.value === index) {
+    return 'active'
   }
 
-  return 'scale-100 opacity-55'
+  if (activeLineIndex.value >= 0 && index < activeLineIndex.value) {
+    return 'past'
+  }
+
+  return 'future'
 }
 
-const getWordClass = (detail: WordDetail, isActive: boolean) => {
-  const baseClass = isActive
-    ? 'text-2xl font-bold text-gray-800'
-    : 'text-xl font-bold text-gray-300'
+const isLineActive = (index: number) => getLineState(index) === 'active'
 
-  if (isElision(detail)) {
-    return `${baseClass} opacity-40`
+const getLineClass = (index: number) => {
+  const state = getLineState(index)
+
+  if (state === 'active') {
+    return 'scale-[1.02] border-orange-100 bg-orange-50/80 opacity-100 shadow-sm ring-1 ring-orange-100'
   }
 
-  return baseClass
+  if (state === 'past') {
+    return 'border-transparent bg-white/50 opacity-45'
+  }
+
+  return 'border-transparent bg-transparent opacity-25'
+}
+
+const getWordClass = (state: LineState) => {
+  if (state === 'active') {
+    return 'text-2xl font-bold text-stone-800'
+  }
+
+  if (state === 'past') {
+    return 'text-xl font-semibold text-stone-400'
+  }
+
+  return 'text-xl font-semibold text-stone-300'
 }
 
 const getWordRowClass = (detail: WordDetail) => {
@@ -137,12 +157,16 @@ const getWordRowClass = (detail: WordDetail) => {
   return 'inline-flex items-start'
 }
 
-const getPinyinClass = (_detail: WordDetail, isActive: boolean) => {
-  if (!isActive) {
-    return 'text-base font-medium text-gray-300'
+const getPinyinClass = (_detail: WordDetail, state: LineState) => {
+  if (state === 'active') {
+    return 'text-lg font-medium text-orange-500'
   }
 
-  return 'text-lg font-medium text-orange-500'
+  if (state === 'past') {
+    return 'text-base font-medium text-stone-400'
+  }
+
+  return 'text-base font-medium text-stone-300'
 }
 
 watch(
@@ -173,90 +197,108 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col gap-4 border-b border-stone-100 pb-6 sm:flex-row sm:items-end sm:justify-between">
+    <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div class="space-y-2">
-        <p class="text-sm font-semibold uppercase tracking-[0.24em] text-stone-400">Now practicing</p>
-        <h2 class="text-2xl font-bold text-stone-900">{{ song.title ?? song.songId }}</h2>
+        <p class="text-sm font-semibold uppercase tracking-[0.28em] text-stone-400">Practice room</p>
+        <h2 class="text-3xl font-semibold tracking-tight text-stone-900">
+          {{ song.title ?? song.songId }}
+        </h2>
         <p v-if="song.artist" class="text-sm text-stone-500">{{ song.artist }}</p>
-        <p class="text-sm text-stone-500">
-          当前时间 {{ currentTime.toFixed(2) }}s / {{ songEndTime.toFixed(2) }}s
-        </p>
       </div>
 
-      <div class="flex flex-wrap gap-3">
-        <button
-          type="button"
-          class="inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
-          @click="startPlayback(1)"
-        >
-          开始模拟播放 (1.0x 原速)
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center justify-center rounded-full bg-orange-100 px-5 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-200"
-          @click="startPlayback(0.75)"
-        >
-          慢速跟练 (0.75x)
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center justify-center rounded-full border border-stone-200 px-5 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-stone-300 hover:text-stone-900"
-          @click="pausePlayback"
-        >
-          暂停
-        </button>
+      <div class="rounded-3xl border border-stone-200 bg-white px-5 py-4 shadow-sm">
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">Live timing</p>
+        <p class="mt-2 text-lg font-semibold text-stone-800">
+          {{ currentTime.toFixed(2) }}s / {{ songEndTime.toFixed(2) }}s
+        </p>
+        <p class="mt-1 text-sm text-stone-500">
+          {{ isPlaying ? `当前以 ${playbackRate.toFixed(2)}x 模拟播放中` : '当前暂停，可随时继续练习' }}
+        </p>
       </div>
     </div>
 
-    <div class="max-h-[68vh] overflow-y-auto pr-2">
-      <div class="space-y-6 py-8">
-        <article
-          v-for="(line, lineIndex) in song.lines"
-          :key="`${song.songId}-${lineIndex}`"
-          :ref="(el) => setLineRef(el, lineIndex)"
-          class="rounded-2xl px-4 py-5 transition-all duration-300 ease-out"
-          :class="[
-            getLineClass(lineIndex),
-            isLineActive(lineIndex)
-              ? 'bg-orange-50/70 shadow-sm ring-1 ring-orange-100'
-              : 'bg-transparent',
-          ]"
-        >
-          <div class="mb-3 flex items-center justify-between gap-3 text-xs text-stone-400">
-            <span>
-              {{ line.startTime.toFixed(2) }}s - {{ line.endTime.toFixed(2) }}s
-            </span>
-            <span v-if="isLineActive(lineIndex)" class="font-semibold uppercase tracking-[0.18em] text-orange-400">
-              Active line
-            </span>
-          </div>
-
-          <div class="flex flex-wrap gap-x-3 gap-y-4">
-            <div
-              v-for="(detail, detailIndex) in line.details"
-              :key="`${detail.word}-${detailIndex}`"
-              class="flex min-w-fit flex-col items-center"
-            >
-              <span :class="getWordRowClass(detail)">
-                <span :class="getWordClass(detail, isLineActive(lineIndex))">
-                  {{ isElision(detail) ? `(${detail.word})` : detail.word }}
-                </span>
-                <span
-                  v-if="detail.linkWithNext"
-                  class="absolute -right-0.5 top-0 text-base leading-none text-emerald-400"
-                >
-                  ︶
-                </span>
+    <div class="rounded-[2rem] border border-stone-100 bg-white/85 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur sm:p-5">
+      <div class="max-h-[66vh] overflow-y-auto pr-2 scroll-smooth">
+        <div class="space-y-5 py-3 sm:space-y-6 sm:py-5">
+          <article
+            v-for="(line, lineIndex) in song.lines"
+            :key="`${song.songId}-${lineIndex}`"
+            :ref="(el) => setLineRef(el, lineIndex)"
+            class="rounded-3xl border px-4 py-5 transition-all duration-300 ease-out sm:px-5"
+            :class="getLineClass(lineIndex)"
+          >
+            <div class="mb-3 flex items-center justify-between gap-3 text-xs text-stone-400">
+              <span>
+                {{ line.startTime.toFixed(2) }}s - {{ line.endTime.toFixed(2) }}s
               </span>
-
-              <span class="mt-1 leading-none">
-                <span :class="getPinyinClass(detail, isLineActive(lineIndex))">
-                  {{ detail.pinyin }}
-                </span>
+              <span
+                v-if="isLineActive(lineIndex)"
+                class="font-semibold uppercase tracking-[0.18em] text-orange-400"
+              >
+                Active line
               </span>
             </div>
-          </div>
-        </article>
+
+            <div class="flex flex-wrap gap-x-3 gap-y-4">
+              <div
+                v-for="(detail, detailIndex) in line.details"
+                :key="`${detail.word}-${detailIndex}`"
+                class="flex min-w-fit flex-col items-center"
+              >
+                <span :class="[getWordRowClass(detail), isElision(detail) ? 'opacity-40' : '']">
+                  <span :class="getWordClass(getLineState(lineIndex))">
+                    {{ isElision(detail) ? `(${detail.word})` : detail.word }}
+                  </span>
+                  <span
+                    v-if="detail.linkWithNext"
+                    class="absolute -right-0.5 top-0 text-base leading-none text-emerald-400"
+                  >
+                    ︶
+                  </span>
+                </span>
+
+                <span class="mt-1 leading-none">
+                  <span :class="getPinyinClass(detail, getLineState(lineIndex))">
+                    {{ detail.pinyin }}
+                  </span>
+                </span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="rounded-[1.75rem] border border-stone-200 bg-white px-5 py-4 shadow-sm">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="space-y-1">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-stone-400">无损倍速控制台</p>
+          <p class="text-sm text-stone-500">保持当前句位，原速、慢速、暂停可随时切换。</p>
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            @click="startPlayback(1)"
+          >
+            原速播放 1.0x
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full bg-orange-100 px-5 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-200"
+            @click="startPlayback(0.75)"
+          >
+            慢速跟练 0.75x
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-full border border-stone-200 px-5 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-stone-300 hover:text-stone-900"
+            @click="pausePlayback"
+          >
+            暂停
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -2,7 +2,11 @@
 
 body {
   margin: 0;
+  background: #fafaf9;
+  color: #292524;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {

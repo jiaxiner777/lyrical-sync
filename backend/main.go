@@ -247,9 +247,10 @@ func searchSongsHandler(c *gin.Context) {
 	keyword := strings.TrimSpace(c.Query("keyword"))
 	title := strings.TrimSpace(c.Query("title"))
 	artist := strings.TrimSpace(c.Query("artist"))
+
+	limit := 20
 	if keyword == "" && title == "" && artist == "" {
-		c.JSON(http.StatusOK, []songSearchItem{})
-		return
+		limit = 8
 	}
 
 	var songs []songSearchItem
@@ -257,7 +258,7 @@ func searchSongsHandler(c *gin.Context) {
 		Model(&database.Song{}).
 		Select("id", "title", "artist").
 		Order("id DESC").
-		Limit(20)
+		Limit(limit)
 
 	if keyword != "" {
 		pattern := "%" + keyword + "%"

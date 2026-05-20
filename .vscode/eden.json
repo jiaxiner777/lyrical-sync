@@ -1,12 +1,12 @@
 {
   "schemaVersion": 5,
-  "totalBricks": 304,
-  "inspirationDew": 25,
+  "totalBricks": 365,
+  "inspirationDew": 27,
   "petName": "Moss",
   "petLineage": "primitives",
   "petLineageSource": "auto",
   "petLineageSettled": true,
-  "growthPoints": 224,
+  "growthPoints": 242,
   "growthStage": "stage-b",
   "successfulSaveCount": 2,
   "theme": "cyber-oasis",
@@ -18,7 +18,7 @@
     "x": 0.88,
     "y": 0.66
   },
-  "totalMeaningfulLinesAdded": 3041,
+  "totalMeaningfulLinesAdded": 3656,
   "petStatus": "normal",
   "editorPetEnabled": true,
   "editorPetScale": 100
