@@ -169,6 +169,29 @@ const getPinyinClass = (_detail: WordDetail, state: LineState) => {
   return 'text-base font-medium text-stone-300'
 }
 
+// --- 播放速率按钮样式：单一数据源 = isPlaying + playbackRate ---
+const activeRateButtonClass =
+  'inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600'
+
+const inactiveRateButtonClass =
+  'inline-flex items-center justify-center rounded-full border border-stone-200 px-5 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-orange-300 hover:text-orange-600'
+
+const rateButtonClass = (rate: 0.75 | 1) => {
+  return isPlaying.value && playbackRate.value === rate
+    ? activeRateButtonClass
+    : inactiveRateButtonClass
+}
+
+const activePauseButtonClass =
+  'inline-flex items-center justify-center rounded-full bg-stone-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800'
+
+const inactivePauseButtonClass =
+  'inline-flex items-center justify-center rounded-full border border-stone-200 px-5 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-stone-300 hover:text-stone-900'
+
+const pauseButtonClass = () => {
+  return isPlaying.value ? inactivePauseButtonClass : activePauseButtonClass
+}
+
 watch(
   () => props.song,
   async () => {
@@ -218,13 +241,13 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="rounded-[2rem] border border-stone-100 bg-white/85 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur sm:p-5">
-      <div class="max-h-[66vh] overflow-y-auto pr-2 scroll-smooth">
+      <div class="max-h-[66vh] overflow-y-auto overflow-x-hidden pr-2 scroll-smooth">
         <div class="space-y-5 py-3 sm:space-y-6 sm:py-5">
           <article
             v-for="(line, lineIndex) in song.lines"
             :key="`${song.songId}-${lineIndex}`"
             :ref="(el) => setLineRef(el, lineIndex)"
-            class="rounded-3xl border px-4 py-5 transition-all duration-300 ease-out sm:px-5"
+            class="min-w-0 overflow-hidden rounded-3xl border px-4 py-5 transition-all duration-300 ease-out sm:px-5"
             :class="getLineClass(lineIndex)"
           >
             <div class="mb-3 flex items-center justify-between gap-3 text-xs text-stone-400">
@@ -239,11 +262,11 @@ onBeforeUnmount(() => {
               </span>
             </div>
 
-            <div class="flex flex-wrap gap-x-3 gap-y-4">
+            <div class="flex min-w-0 flex-wrap gap-x-3 gap-y-4">
               <div
                 v-for="(detail, detailIndex) in line.details"
                 :key="`${detail.word}-${detailIndex}`"
-                class="flex min-w-fit flex-col items-center"
+                class="flex max-w-full min-w-fit flex-col items-center"
               >
                 <span :class="[getWordRowClass(detail), isElision(detail) ? 'opacity-40' : '']">
                   <span :class="getWordClass(getLineState(lineIndex))">
@@ -279,21 +302,21 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap gap-3">
           <button
             type="button"
-            class="inline-flex items-center justify-center rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            :class="rateButtonClass(1)"
             @click="startPlayback(1)"
           >
             原速播放 1.0x
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center rounded-full bg-orange-100 px-5 py-2.5 text-sm font-semibold text-orange-700 transition hover:bg-orange-200"
+            :class="rateButtonClass(0.75)"
             @click="startPlayback(0.75)"
           >
             慢速跟练 0.75x
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center rounded-full border border-stone-200 px-5 py-2.5 text-sm font-semibold text-stone-600 transition hover:border-stone-300 hover:text-stone-900"
+            :class="pauseButtonClass()"
             @click="pausePlayback"
           >
             暂停

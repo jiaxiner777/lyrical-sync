@@ -1,1 +1,38 @@
+# Environment variables
 backend/.env
+*.env.local
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Logs
+*.log
+
+# Do NOT ignore .env.example
+!backend/.env.example
