@@ -77,7 +77,8 @@
 ### 前置条件
 
 - Go 1.25+
-- Node.js 18+
+- Node.js `^20.19.0 || >=22.12.0`
+  - 该范围来自 Vite 8 的 engines 声明；当前本地使用 Node.js v22.22.2，已通过 `npm run build`。
 - 一个 DeepSeek（或其他 OpenAI 兼容）API Key
 
 ### 1. 克隆仓库
@@ -139,7 +140,9 @@ curl http://localhost:8080/api/songs/search
 | `GET`  | `/api/songs/search` | 按关键词 / 标题 / 歌手搜索本地缓存歌曲库 |
 | `GET`  | `/api/songs/:id` | 获取歌曲详情（含发音标注数据） |
 
-所有接口的跨域设置默认允许 `http://localhost:5173` 与 `http://127.0.0.1:5173`。
+> **CORS 说明：** 开发环境下，后端会将请求的 `Origin` 原样写入 `Access-Control-Allow-Origin`，未设置固定白名单，也未启用 `Access-Control-Allow-Credentials`。该配置便于本地前后端联调；若部署到公网，应改为显式的 Origin 白名单。
+
+> **CORS note:** In development, the backend reflects the request `Origin` in `Access-Control-Allow-Origin`. It does not use a fixed allowlist and does not enable `Access-Control-Allow-Credentials`. This is convenient for local frontend-backend integration; public deployments should use an explicit Origin allowlist.
 
 ---
 
